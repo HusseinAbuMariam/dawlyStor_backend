@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { FilePond, registerPlugin } from 'react-filepond'
 import 'filepond/dist/filepond.min.css'
 
@@ -59,7 +59,7 @@ export default function FileUpload({
     const getInitialFiles = useCallback(() => {
         if (!initialFiles) return [];
         return initialFiles.map((file) => ({
-            source: file.original_url,
+            source: String(file.id),
             options: { type: 'local' },
         }))
     }, [initialFiles])
@@ -95,77 +95,74 @@ export default function FileUpload({
                 maxFiles={maxFiles}
                 acceptedFileTypes={acceptedFileTypes}
                 server={{
-                    url: '/temp-uploads',
-                    process: {
-                        url: '',
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': getCsrfToken(),
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                        onload: (response: string) => {
-                            try {
-                                const data = JSON.parse(response)
-                                return data.media_id || data.id || response
-                            } catch {
-                                return response
-                            }
-                        },
-                    },
+                    process: (fieldName, file, metadata, load, error, progress, abort) => {
+                        const formData = new FormData()
+                        formData.append(fieldName, file, file.name)
 
-                    revert: {
-                        url: '',
-                        method: 'DELETE',
-                        headers: {
-                            'X-CSRF-TOKEN': getCsrfToken(),
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                    },
+                        const request = new XMLHttpRequest()
+                        request.open('POST', '/upload-temp')
+                        request.setRequestHeader('X-CSRF-TOKEN', getCsrfToken())
 
-                    load: (source, load, error) => {
-                        const url = source.startsWith('http')
-                            ? source
-                            : `/temp-uploads/${source.split('/')[0]}/${source.split('/')[1]}`;
-                        fetch(url, {
-                            method: 'GET',
-                            headers: {
-                                'X-CSRF-TOKEN': getCsrfToken(),
-                                'X-Requested-With': 'XMLHttpRequest',
-                            },
-                        })
-                            .then(response => {
-                                return response.blob()
-                            })
-                            .then(blob => {
-                                load(new Blob([blob], { type: blob.type }))
-                            })
-                            .catch(error => {
-                                console.error('File loading error:', error)
-                                return
-                            })
-                    },
+                        request.upload.onprogress = (e) => {
+                            progress(e.lengthComputable, e.loaded, e.total)
+                        }
 
-                    remove: (source, load, error) => {
-                        fetch(`/temp-uploads/${source}`, {
-                            method: 'DELETE',
-                            headers: {
-                                'X-CSRF-TOKEN': getCsrfToken(),
-                                'X-Requested-With': 'XMLHttpRequest',
-                            },
-                        })
-                            .then(response => {
-                                if (!response.ok) {
-                                    throw new Error('Failed to remove file')
+                        request.onload = () => {
+                            if (request.status >= 200 && request.status < 300) {
+                                try {
+                                    const data = JSON.parse(request.responseText)
+                                    load(data.media_id)
+                                } catch {
+                                    load(request.responseText)
                                 }
-                                return response.json()
+                            } else {
+                                error('Upload failed')
+                            }
+                        }
+
+                        request.onerror = () => error('Upload failed')
+                        request.send(formData)
+
+                        return {
+                            abort: () => {
+                                request.abort()
+                                abort()
+                            },
+                        }
+                    },
+
+                    revert: async (uniqueFileId, load, error) => {
+                        try {
+                            await fetch('/revert-temp', {
+                                method: 'DELETE',
+                                headers: {
+                                    'X-CSRF-TOKEN': getCsrfToken(),
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Content-Type': 'text/plain',
+                                },
+                                body: uniqueFileId,
                             })
-                            .then(data => {
-                                load();
+                            load()
+                        } catch {
+                            error('Revert failed')
+                        }
+                    },
+
+                    load: '/load-file/',
+
+                    remove: async (source, load, error) => {
+                        try {
+                            await fetch(`/remove-file/${source}`, {
+                                headers: {
+                                    'X-CSRF-TOKEN': getCsrfToken(),
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                method: 'DELETE'
                             })
-                            .catch(error => {
-                                console.error('File removal error:', error)
-                                return
-                            })
+                            load()
+                        } catch (e) {
+                            if (error) error('Failed to remove file')
+                        }
                     }
                 }}
                 labelIdle='Drag & Drop your files or <span class="filepond--label-action">Browse</span>'

@@ -19,14 +19,12 @@ Route::middleware(['auth:store'])->group(function () {
     Route::get('store', [App\Http\Controllers\dashboard\store\DashboardController::class, 'index'])->name('store.dashboard');
 });
 
-Route::prefix('temp-uploads')
-    ->name('temp-uploads.')
-    ->middleware(['auth:admin,store'])
+Route::middleware(['auth:admin,store'])
     ->group(function () {
-        Route::post('/', [App\Http\Controllers\TempUploadController::class, 'store'])->name('store');
-        Route::delete('/', [App\Http\Controllers\TempUploadController::class, 'revert'])->name('revert');
-        Route::get('/{id}/{file_name}', [App\Http\Controllers\TempUploadController::class, 'load'])->name('load');
-        Route::delete('/{id}/{file_name}', [App\Http\Controllers\TempUploadController::class, 'remove'])->name('remove');
+        Route::post('/upload-temp', [App\Http\Controllers\TempUploadController::class, 'store'])->name('upload-temp');
+        Route::delete('/revert-temp', [App\Http\Controllers\TempUploadController::class, 'revert'])->name('revert-temp');
+        Route::get('/load-file/{source}', [App\Http\Controllers\TempUploadController::class, 'load'])->name('load-file');
+        Route::delete('/remove-file/{source}', [App\Http\Controllers\TempUploadController::class, 'remove'])->name('remove-file');
     });
 
 Route::get('language/{locale}', function ($locale) {

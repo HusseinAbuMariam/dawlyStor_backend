@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 class TempUploadController extends Controller
@@ -28,15 +29,12 @@ class TempUploadController extends Controller
         }
 
         $request->validate([
-            'filepond' => 'sometimes|file|max:10240', // 10MB max
+            'filepond' => 'sometimes|file|max:2048', // 2MB max
         ]);
 
         $media = Auth::user()->addMedia($file)->toMediaCollection('temp');
 
-        // FilePond expects the response to be the file ID (or a string that onload can process)
-        return response()->json([
-            'media_id' => (string) $media->id,
-        ]);
+        return response()->json(['media_id' => (string) $media->id]);
     }
 
     /**
@@ -55,18 +53,17 @@ class TempUploadController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /**
-     * Get a temporary file URL
-     */
-    public function load($id, $file_name)
+    public function load($id)
     {
         $Media = Media::findOrFail($id);
 
         if (!$Media) {
-            return response()->json(['error' => 'File not found'], 404);
+            return response()->json(['success' => false, 'message' => 'File not found'], 404);
         }
 
-        return redirect($Media->getUrl());
+        return response()->file($Media->getPath(), [
+            'Content-Disposition' => 'inline; filename="' . $Media->file_name . '"',
+        ]);
     }
 
 
