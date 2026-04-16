@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
             // BetaMarketExtraSeeder::class,
             // TransactionSeeder::class,
             // PlatformCommissionSeeder::class,
+            ProductImagesSeeder::class,
         ]);
     }
 }
